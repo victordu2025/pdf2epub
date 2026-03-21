@@ -1,0 +1,25 @@
+[project]
+name = "pdf2epub"
+version = "0.1.0"
+description = "扫描版 PDF → 精排 EPUB：OCR + 校对 + 注释 + 排版一条龙"
+requires-python = ">=3.11"
+dependencies = [
+    "requests",
+    "pypdfium2",
+    "PyMuPDF",
+    "Pillow",
+    "ebooklib",
+    "markdown",
+    "opencc-python-reimplemented",
+    "beautifulsoup4",
+    "lxml",
+    "pdf-craft",  # epub_generator 排版引擎
+]
+
+[project.optional-dependencies]
+glm = ["glmocr"]
+
+[project.scripts]
+pdf2epub-ocr = "pdf2epub.ocr:main"
+pdf2epub-build = "pdf2epub.epub:main"
+pdf2epub-proof = "pdf2epub.proofread:main"

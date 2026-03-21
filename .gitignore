@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.pdf2epub/
+*.egg-info/
+dist/
+build/
+.env
