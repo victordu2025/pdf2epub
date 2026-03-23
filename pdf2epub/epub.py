@@ -102,9 +102,14 @@ def merge_cross_page_breaks(text: str) -> str:
 def text_to_chapter(
     text: str,
     annotations: list[dict] | None = None,
-    endnote: str | None = None,
+    endnote: dict | None = None,
+    chapter_title: str = "",
 ) -> eg.Chapter:
-    """纯文本 → epub_generator.Chapter，支持脚注和章末札记"""
+    """纯文本 → epub_generator.Chapter，支持脚注和章末札记
+
+    endnote: {"title": "札记", "paragraphs": ["段落1", ...]}
+    chapter_title: 显示为页面 h2 标题
+    """
     text = merge_cross_page_breaks(text)
 
     # 注释索引
@@ -114,6 +119,10 @@ def text_to_chapter(
             anno_map[a["trigger"]] = (i + 1, a["note"])
 
     elements = []
+
+    # 章节标题
+    if chapter_title:
+        elements.append(eg.TextBlock(kind=eg.TextKind.HEADLINE, level=1, content=[chapter_title]))
     footnotes = []
     used_ids = set()
     fid_counter = [0]
@@ -152,12 +161,20 @@ def text_to_chapter(
             elements.append(eg.TextBlock(kind=eg.TextKind.BODY, level=0, content=annotate(para)))
 
     # 章末札记
-    if endnote:
-        elements.append(eg.TextBlock(kind=eg.TextKind.HEADLINE, level=3, content=["读后札记"]))
-        for para in endnote.strip().split("\n\n"):
-            para = para.strip()
-            if para:
-                elements.append(eg.TextBlock(kind=eg.TextKind.QUOTE, level=0, content=[para]))
+    if endnote and endnote.get("paragraphs"):
+        elements.append(eg.TextBlock(
+            kind=eg.TextKind.BODY, level=0,
+            content=[eg.HTMLTag(name="span", attributes=[("class", "endnote-sep")], content=["◆"])],
+        ))
+        elements.append(eg.TextBlock(
+            kind=eg.TextKind.HEADLINE, level=2,
+            content=[endnote.get("title", "札记")],
+        ))
+        for para in endnote["paragraphs"]:
+            elements.append(eg.TextBlock(
+                kind=eg.TextKind.BODY, level=0,
+                content=[eg.HTMLTag(name="span", attributes=[("class", "endnote-text")], content=[para])],
+            ))
 
     return eg.Chapter(elements=elements, footnotes=footnotes)
 
@@ -173,12 +190,14 @@ def build_epub(
     t2s: bool = False,
     cover_image: str | None = None,
     annotations: dict[str, list[dict]] | None = None,
-    endnotes: dict[str, str] | None = None,
+    endnotes: dict[str, dict] | None = None,
+    prefaces: list | None = None,
 ):
     """构建精排 EPUB。
 
     annotations: {章节标题: [{trigger, note}]}
-    endnotes: {章节标题: "章末札记文本"}
+    endnotes: {章节标题: {title, paragraphs}}
+    prefaces: [eg.TocItem] 卷首页（如地图）
     """
     cc = None
     if t2s:
@@ -204,9 +223,8 @@ def build_epub(
         ch_content = convert(ch.get("content", ""))
         ch_annos = annotations.get(ch["title"], []) if annotations else None
         ch_endnote = endnotes.get(ch["title"]) if endnotes else None
-        if ch_endnote:
-            ch_endnote = convert(ch_endnote)
-        chapter_obj = text_to_chapter(ch_content, ch_annos, ch_endnote)
+        chapter_obj = text_to_chapter(ch_content, ch_annos, ch_endnote,
+                                      chapter_title=ch_title)
         toc_items.append(eg.TocItem(
             title=ch_title,
             get_chapter=lambda c=chapter_obj: c,
@@ -214,6 +232,7 @@ def build_epub(
 
     epub_data = eg.EpubData(
         meta=meta,
+        prefaces=prefaces or [],
         chapters=toc_items,
         cover_image_path=cover_path,
     )
@@ -237,7 +256,7 @@ def main():
     p.add_argument("--t2s", action="store_true", help="繁→简")
     p.add_argument("--cover", help="封面图片路径")
     p.add_argument("--annotations", help="注释 JSON 文件: {章节标题: [{trigger, note}]}")
-    p.add_argument("--endnotes", help="章末札记 JSON 文件: {章节标题: '札记文本'}")
+    p.add_argument("--endnotes", help="章末札记 JSON: {章节标题: {title, paragraphs}}")
     args = p.parse_args()
 
     cache_dir = Path(args.cache_dir)
